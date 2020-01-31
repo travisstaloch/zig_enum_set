@@ -9,7 +9,7 @@ pub fn build(b: *Builder) void {
     var main_tests = b.addTest("tests.zig");
     main_tests.setBuildMode(mode);
 
-    const gen_step = b.step("gen", "Generate test files");
+    const gen_step = b.step("gen", "Generate test files (depends on julia: https://julialang.org) ");
     const gen_cmd_step = b.addSystemCommand(&[_][]const u8{ "julia", "test/generate.jl" });
     gen_step.dependOn(&gen_cmd_step.step);
 
