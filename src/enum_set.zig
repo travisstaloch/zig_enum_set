@@ -21,31 +21,35 @@ pub fn EnumSet(comptime T: type) type {
             return result;
         }
 
-        pub fn set(self: *Self, e: var) void {
+        pub fn put(self: *Self, e: var) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
                 self.bits.set(@enumToInt(@as(T, @field(e, f.name))));
             }
         }
 
-        pub fn unset(self: *Self, e: var) void {
+        pub fn get(self: Self, i: u1) ?T {
+            return if (self.bits.at(i)) |_| @intToEnum(T, i) else null;
+        }
+
+        pub fn remove(self: *Self, e: var) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
                 self.bits.unset(@enumToInt(@as(T, @field(e, f.name))));
             }
         }
 
-        pub fn has(self: Self, e: T) bool {
+        pub fn contains(self: Self, e: T) bool {
             return if (self.bits.at(@enumToInt(e))) |bit| bit == 1 else false;
         }
 
-        pub fn hasAll(self: Self, e: var) bool {
+        pub fn containsAll(self: Self, e: var) bool {
             inline for (std.meta.fields(@TypeOf(e))) |f|
-                if (!self.has(@field(e, f.name))) return false;
+                if (!self.contains(@field(e, f.name))) return false;
             return true;
         }
 
-        pub fn hasAny(self: Self, e: var) bool {
+        pub fn containsAny(self: Self, e: var) bool {
             inline for (std.meta.fields(@TypeOf(e))) |f|
-                if (self.has(@field(e, f.name))) return true;
+                if (self.contains(@field(e, f.name))) return true;
             return false;
         }
 
@@ -63,7 +67,6 @@ pub fn EnumSet(comptime T: type) type {
             comptime var buf: [10]u8 = undefined;
             comptime const size_str = bitFmtStr(&buf) catch unreachable;
             warn("\n", .{});
-            // TODO: make format string at comptime based on len
             warn("{b:0>" ++ size_str ++ "}\n", .{self.bits.value});
             warn("\n", .{});
         }
@@ -108,18 +111,18 @@ pub fn EnumSet(comptime T: type) type {
         }
 
         /// allocates memory for returned enum slice
-        /// caller is responsible for freeing memory
+        /// caller is responsible for freeing
         pub fn toEnumSlice(self: Self, a: *std.mem.Allocator) ![]T {
             return try self.translate(a, T);
         }
 
         /// allocates memory for returned enum slice
-        /// caller is responsible for freeing memory
+        /// caller is responsible for freeing
         pub fn translate(self: Self, a: *std.mem.Allocator, comptime To: type) ![]To {
             const ct = self.count();
             var result = try a.alloc(To, ct);
             const result_start_ptr = result.ptr;
-            var i: BitsType.ShiftType = 0;
+            var i: usize = 0;
             while (i < member_count) : (i += 1) {
                 const at = self.bits.at(i) orelse continue;
                 if (at == 1) {
@@ -138,54 +141,55 @@ test "basic set / get" {
     const MyFlags = @import("../test/myflags.zig").MyFlags;
     var my_set = EnumSet(MyFlags).init(.{.AA});
 
-    my_set.set(.{ .AA, .AB });
-    testing.expect(my_set.has(.AA));
-    testing.expect(my_set.has(.AB));
-    testing.expect(!my_set.has(.AC));
+    my_set.put(.{ .AA, .AB });
+    testing.expect(my_set.contains(.AA));
+    testing.expect(my_set.contains(.AB));
+    testing.expect(!my_set.contains(.AC));
+    testing.expect(if (my_set.get(0)) |e| e == .AA else false);
 
-    my_set.unset(.{.AB});
-    testing.expect(my_set.has(.AA));
-    testing.expect(!my_set.has(.AB));
-    testing.expect(!my_set.has(.AC));
+    my_set.remove(.{.AB});
+    testing.expect(my_set.contains(.AA));
+    testing.expect(!my_set.contains(.AB));
+    testing.expect(!my_set.contains(.AC));
 
-    my_set.set(.{ .ZZ, .ZY });
-    testing.expect(my_set.has(.ZY));
-    testing.expect(my_set.has(.ZZ));
-    testing.expect(!my_set.has(.ZX));
+    my_set.put(.{ .ZZ, .ZY });
+    testing.expect(my_set.contains(.ZY));
+    testing.expect(my_set.contains(.ZZ));
+    testing.expect(!my_set.contains(.ZX));
 
-    my_set.unset(.{.ZY});
-    testing.expect(!my_set.has(.ZY));
-    testing.expect(my_set.has(.ZZ));
-    testing.expect(!my_set.has(.ZX));
+    my_set.remove(.{.ZY});
+    testing.expect(!my_set.contains(.ZY));
+    testing.expect(my_set.contains(.ZZ));
+    testing.expect(!my_set.contains(.ZX));
 
-    my_set.set(.{ .AH, .AI, .AJ });
-    testing.expect(my_set.hasAll(.{ .AH, .AI, .AJ }));
-    testing.expect(!my_set.hasAny(.{ .BH, .BI, .BJ }));
+    my_set.put(.{ .AH, .AI, .AJ });
+    testing.expect(my_set.containsAll(.{ .AH, .AI, .AJ }));
+    testing.expect(!my_set.containsAny(.{ .BH, .BI, .BJ }));
 }
 
 test "set / get with huge enum" {
     const HugeEnum = @import("../test/my_huge_enum.zig").HugeEnum; // 26 ^ 3 members .AAA .. .ZZZ
     var huge_set = EnumSet(HugeEnum).init(.{.AAA});
 
-    huge_set.set(.{ .AAA, .AAB });
-    testing.expect(huge_set.has(.AAA));
-    testing.expect(huge_set.has(.AAB));
-    testing.expect(!huge_set.has(.AAC));
+    huge_set.put(.{ .AAA, .AAB });
+    testing.expect(huge_set.contains(.AAA));
+    testing.expect(huge_set.contains(.AAB));
+    testing.expect(!huge_set.contains(.AAC));
 
-    huge_set.unset(.{.AAB});
-    testing.expect(huge_set.has(.AAA));
-    testing.expect(!huge_set.has(.AAB));
-    testing.expect(!huge_set.has(.AAC));
+    huge_set.remove(.{.AAB});
+    testing.expect(huge_set.contains(.AAA));
+    testing.expect(!huge_set.contains(.AAB));
+    testing.expect(!huge_set.contains(.AAC));
 
-    huge_set.set(.{ .ZZZ, .ZZY });
-    testing.expect(huge_set.has(.ZZY));
-    testing.expect(huge_set.has(.ZZZ));
-    testing.expect(!huge_set.has(.ZZX));
+    huge_set.put(.{ .ZZZ, .ZZY });
+    testing.expect(huge_set.contains(.ZZY));
+    testing.expect(huge_set.contains(.ZZZ));
+    testing.expect(!huge_set.contains(.ZZX));
 
-    huge_set.unset(.{.ZZY});
-    testing.expect(huge_set.has(.ZZZ));
-    testing.expect(!huge_set.has(.ZZY));
-    testing.expect(!huge_set.has(.ZZX));
+    huge_set.remove(.{.ZZY});
+    testing.expect(huge_set.contains(.ZZZ));
+    testing.expect(!huge_set.contains(.ZZY));
+    testing.expect(!huge_set.contains(.ZZX));
 
     // bug triggered by printing this enumSet
     // zig version 0.5.0+7ebc624a1 Thu 30 Jan 2020
@@ -204,20 +208,20 @@ test "set operations" {
     const a = ESet.init(.{ .A, .B });
     const b = ESet.init(.{ .B, .C });
     const c = a.intersect(b);
-    testing.expect(c.has(.B));
-    testing.expect(!c.hasAny(.{ .A, .C }));
+    testing.expect(c.contains(.B));
+    testing.expect(!c.containsAny(.{ .A, .C }));
 
     const d = a.join(b);
-    testing.expect(d.hasAll(.{ .A, .B, .C }));
+    testing.expect(d.containsAll(.{ .A, .B, .C }));
 
     var e = ESet.init(.{ .A, .B, .C });
     e.clear();
     testing.expect(e.isEmpty());
-    testing.expect(!e.hasAny(.{ .A, .B, .C }));
+    testing.expect(!e.containsAny(.{ .A, .B, .C }));
 
     const f = ESet.init(.{ .A, .B, .C }).difference(ESet.init(.{ .A, .B }));
-    testing.expect(f.has(.C));
-    testing.expect(!f.hasAny(.{ .A, .B }));
+    testing.expect(f.contains(.C));
+    testing.expect(!f.containsAny(.{ .A, .B }));
 
     testing.expect(a.count() == 2);
     testing.expect(b.count() == 2);
@@ -257,4 +261,95 @@ test "translate / toEnumSlice" {
 
     var buf: [10]u8 = undefined;
     testing.expect(std.mem.eql(u8, try e.limbString(&buf), "111"));
+}
+
+test "demo" {
+    // const std = @import("std");
+    const expect = std.testing.expect;
+    const E = enum {
+        A,
+        B,
+        C,
+    };
+    const ESet = EnumSet(E);
+
+    // insert and remove elements
+    var ab = ESet.init(.{ .A, .B });
+    ab.remove(.{.B});
+    expect(ab.count() == 1);
+    ab.clear();
+    expect(ab.count() == 0);
+    const bc = ESet.init(.{ .B, .C });
+    const ac = ESet.init(.{ .A, .C });
+    const abc = ESet.init(.{ .A, .B, .C });
+    const b = ESet.init(.{.B});
+    const c = ESet.init(.{.C});
+    ab.put(.{ .A, .B });
+    expect(if (ab.get(0)) |e| e == .A else false);
+
+    // set operations
+    expect(ab.contains(.A));
+    expect(ab.containsAll(.{ .A, .B }));
+    expect(ab.containsAny(.{.A}));
+    expect(ab.intersect(bc).equals(b));
+    expect(ab.join(bc).equals(abc));
+    expect(abc.difference(ac).equals(b));
+    expect(ab.complement().equals(c));
+    expect(!ab.isEmpty());
+    expect(ab.isSubsetOf(abc));
+    expect(ab.equals(ab));
+
+    // while loop over each bit
+    var _abc = abc; // need to be a mutable 'var'
+    var i: usize = 0;
+    while (_abc.bits.next()) |bit| : (i += 1) {
+        const at = _abc.bits.at(i) orelse return testing.expect(false);
+        testing.expect(bit == at);
+    }
+    _abc.bits.reset(); // to use as iterator again, first reset()
+
+    // for loop over each byte (u8)
+    for (abc.bits.toSlice()) |byte, byte_idx| {
+        var bit_idx: usize = 0;
+        while (bit_idx < 8) : (bit_idx += 1) {
+            const bit_offset = byte_idx * 8 + bit_idx;
+            if (bit_offset >= abc.count()) break;
+            if (abc.bits.at(bit_offset)) |at|
+                expect((byte >> @truncate(u3, bit_idx)) & 1 == at);
+        }
+    }
+
+    // for loop over each byte using ByteView
+    for (abc.bits.byteViewSlice()) |byte_view, byte_view_idx| {
+        // ByteView allows field access of each bit with fields _0, _1 .. _7
+        if (abc.bits.at(byte_view_idx * 8 + 0)) |at| expect(byte_view._0 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 1)) |at| expect(byte_view._1 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 2)) |at| expect(byte_view._2 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 3)) |at| expect(byte_view._3 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 4)) |at| expect(byte_view._4 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 5)) |at| expect(byte_view._5 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 6)) |at| expect(byte_view._6 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 7)) |at| expect(byte_view._7 == at);
+
+        // the same can be done using @field
+        inline for (std.meta.fields(ESet.BitsType.ByteView)) |f, field_idx| {
+            const bit_offset = byte_view_idx * 8 + field_idx;
+            if (bit_offset >= abc.count()) break;
+            if (abc.bits.at(bit_offset)) |at| expect(@field(byte_view, f.name) == at);
+        }
+    }
+
+    // making enum slices does requires an allocator
+    // this is the only place an allocator is used
+    const allocator = std.heap.page_allocator;
+    expect(std.mem.eql(E, &[_]E{ .A, .B, .C }, try abc.toEnumSlice(allocator)));
+
+    // translate from one enum set to another
+    const F = enum {
+        D,
+        E,
+        F,
+    };
+    const FSet = EnumSet(F);
+    expect(std.mem.eql(F, &[_]F{ .D, .E, .F }, try abc.translate(allocator, F)));
 }
