@@ -1,59 +1,40 @@
+const Bits = @import("bits.zig").Bits;
 const std = @import("std");
 const testing = std.testing;
 const warn = std.debug.warn;
 
 pub fn EnumSet(comptime T: type) type {
     return struct {
-        const LimbType = u64;
-        const limb_bit_count = @sizeOf(LimbType) * 8;
-        const bit_offset_size = std.math.log(LimbType, 2, limb_bit_count);
-        const BitOffsetType = @IntType(false, bit_offset_size);
-        const limb_count = (@memberCount(T) / limb_bit_count) + 1;
-        const LimbsType = @Vector(limb_count, LimbType);
+        pub const member_count = @memberCount(T);
+        pub const BitsIntType = @IntType(false, member_count);
+        pub const BitsType = Bits(BitsIntType);
 
-        limbs: LimbsType = [1]LimbType{0} ** limb_count,
-        // const NewLimbType = @IntType(false, limb_bit_count);
-        // limbs: NewLimbType = 0,
+        bits: BitsType,
 
         const Self = @This();
-        const Offsets = struct {
-            whole: usize,
-            limb: usize,
-            bit: BitOffsetType,
-        };
-
-        pub fn limbOffsets(enum_value: T) Offsets {
-            const whole = @as(LimbType, @enumToInt(enum_value));
-            const limb = whole / limb_bit_count;
-            return .{ .whole = whole, .limb = limb, .bit = @intCast(BitOffsetType, whole % limb_bit_count) };
-        }
 
         pub fn init(e: var) Self {
-            var result = Self{};
+            var result = Self{ .bits = BitsType.initZero() };
             inline for (std.meta.fields(@TypeOf(e))) |f| {
-                const offsets = limbOffsets(@field(e, f.name));
-                result.limbs[offsets.limb] |= @as(LimbType, 1) << offsets.bit;
+                result.bits.set(@enumToInt(@as(T, @field(e, f.name))));
             }
             return result;
         }
 
         pub fn set(self: *Self, e: var) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
-                const offsets = limbOffsets(@field(e, f.name));
-                self.limbs[offsets.limb] |= @as(LimbType, 1) << offsets.bit;
+                self.bits.set(@enumToInt(@as(T, @field(e, f.name))));
             }
         }
 
         pub fn unset(self: *Self, e: var) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
-                const offsets = limbOffsets(@field(e, f.name));
-                self.limbs[offsets.limb] &= ~(@as(LimbType, 1) << offsets.bit);
+                self.bits.unset(@enumToInt(@as(T, @field(e, f.name))));
             }
         }
 
         pub fn has(self: Self, e: T) bool {
-            const offsets = limbOffsets(e);
-            return self.limbs[offsets.limb] & (@as(LimbType, 1) << offsets.bit) > 0;
+            return if (self.bits.at(@enumToInt(e))) |bit| bit == 1 else false;
         }
 
         pub fn hasAll(self: Self, e: var) bool {
@@ -68,29 +49,32 @@ pub fn EnumSet(comptime T: type) type {
             return false;
         }
 
-        pub fn limbString(self: Self, limb_index: usize, buf: []u8) ![]const u8 {
-            const size_str = comptime blk: {
-                var buf2: [3]u8 = undefined;
-                break :blk try std.fmt.bufPrint(&buf2, "{}", .{limb_bit_count});
-            };
-            return try std.fmt.bufPrint(buf, "{b:0>" ++ size_str ++ "}", .{self.limbs[limb_index]});
+        fn bitFmtStr(buf: *[10]u8) ![]u8 {
+            return try std.fmt.bufPrint(buf, "{d:0>10}", .{member_count});
+        }
+
+        pub fn limbString(self: Self, buf: []u8) ![]const u8 {
+            comptime var buf2: [10]u8 = undefined;
+            comptime const size_str = bitFmtStr(&buf2) catch unreachable;
+            return try std.fmt.bufPrint(buf, "{b:0>" ++ size_str ++ "}", .{self.bits.value});
         }
 
         pub fn printLimbs(self: Self) void {
-            var buf: [limb_bit_count]u8 = undefined;
+            comptime var buf: [10]u8 = undefined;
+            comptime const size_str = bitFmtStr(&buf) catch unreachable;
             warn("\n", .{});
-            var i: usize = 0;
-            while (i < limb_count) : (i += 1) warn("{} ", .{self.limbString(i, &buf) catch unreachable});
+            // TODO: make format string at comptime based on len
+            warn("{b:0>" ++ size_str ++ "}\n", .{self.bits.value});
             warn("\n", .{});
         }
 
         pub fn intersect(self: Self, other: Self) Self {
-            return .{ .limbs = self.limbs & other.limbs };
+            return .{ .bits = BitsType.init(self.bits.value & other.bits.value) };
         }
 
         /// set union
         pub fn join(self: Self, other: Self) Self {
-            return .{ .limbs = self.limbs | other.limbs };
+            return .{ .bits = BitsType.init(self.bits.value | other.bits.value) };
         }
 
         pub fn difference(self: Self, other: Self) Self {
@@ -98,21 +82,11 @@ pub fn EnumSet(comptime T: type) type {
         }
 
         pub fn complement(self: Self) Self {
-            // TODO: when vectors support bit complement use this
-            // return .{ .limbs = self.limbs & ~other.limbs };
-            var result = Self{ .limbs = undefined };
-            var i: usize = 0;
-            while (i < limb_count) : (i += 1) result.limbs[i] = ~self.limbs[i];
-            return result;
+            return .{ .bits = BitsType.init(~self.bits.value) };
         }
 
-        pub fn count(self: Self) LimbType {
-            // TODO: switch to simd operation when supported
-            // return @popCount(LimbsType, self.limbs);
-            var result: LimbType = 0;
-            var i: usize = 0;
-            while (i < limb_count) : (i += 1) result += @popCount(LimbType, self.limbs[i]);
-            return result;
+        pub fn count(self: Self) usize {
+            return @popCount(usize, self.bits.value);
         }
 
         pub fn isEmpty(self: Self) bool {
@@ -126,60 +100,41 @@ pub fn EnumSet(comptime T: type) type {
         }
 
         pub fn equals(self: Self, other: Self) bool {
-            // TODO: replace with @reduce when language supports it
-            // NOTE: following line doesn't work for usize/isize limb types
-            const limbs_eq = self.limbs == other.limbs;
-            var i: usize = 0;
-            var result = true;
-            while (result and i < limb_count) : (i += 1) result = limbs_eq[i];
-            return result;
+            return self.bits.value == other.bits.value;
         }
 
         pub fn clear(self: *Self) void {
-            self.limbs = @splat(limb_count, @as(LimbType, 0));
+            self.bits = BitsType.initZero();
         }
 
-        pub fn toEnums(self: Self, a: *std.mem.Allocator) ![]T {
+        /// allocates memory for returned enum slice
+        /// caller is responsible for freeing memory
+        pub fn toEnumSlice(self: Self, a: *std.mem.Allocator) ![]T {
             return try self.translate(a, T);
         }
 
+        /// allocates memory for returned enum slice
+        /// caller is responsible for freeing memory
         pub fn translate(self: Self, a: *std.mem.Allocator, comptime To: type) ![]To {
             const ct = self.count();
             var result = try a.alloc(To, ct);
-            // const result_start_ptr = result.ptr;
-            // var limb_i: usize = 0;
-            // while (limb_i < limb_count) : (limb_i += 1) {
-            //     var limb = self.limbs[limb_i];
-            //     var bit_i: usize = 0;
-            //     while (limb > 0 and bit_i < limb_bit_count) : (bit_i += 1) {
-            //         if (limb & 1 == 1) {
-            //             result[0] = @intToEnum(To, @intCast(@TagType(T), limb_i * limb_bit_count + bit_i));
-            //             result.ptr += 1;
-            //         }
-            //         limb >>= 1;
-            //     }
-            // }
-            // result.ptr = result_start_ptr;
             const result_start_ptr = result.ptr;
-            const as_bit_vec = self.asBitVec();
-            var i: usize = 0;
-            while (i < ct) : (i += 1) {
-                if (as_bit_vec[i]) {
+            var i: BitsType.ShiftType = 0;
+            while (i < member_count) : (i += 1) {
+                const at = self.bits.at(i) orelse continue;
+                if (at == 1) {
                     result[0] = @intToEnum(To, @intCast(@TagType(T), i));
                     result.ptr += 1;
                 }
             }
+
             result.ptr = result_start_ptr;
             return result;
-        }
-
-        pub fn asBitVec(self: Self) @Vector(limb_bit_count, bool) {
-            return @bitCast(@Vector(limb_bit_count, bool), self.limbs);
         }
     };
 }
 
-test "bitset with enum" {
+test "basic set / get" {
     const MyFlags = @import("../test/myflags.zig").MyFlags;
     var my_set = EnumSet(MyFlags).init(.{.AA});
 
@@ -206,11 +161,9 @@ test "bitset with enum" {
     my_set.set(.{ .AH, .AI, .AJ });
     testing.expect(my_set.hasAll(.{ .AH, .AI, .AJ }));
     testing.expect(!my_set.hasAny(.{ .BH, .BI, .BJ }));
-
-    // my_set.printLimbs();
 }
 
-test "bitset with huge enum" {
+test "set / get with huge enum" {
     const HugeEnum = @import("../test/my_huge_enum.zig").HugeEnum; // 26 ^ 3 members .AAA .. .ZZZ
     var huge_set = EnumSet(HugeEnum).init(.{.AAA});
 
@@ -233,6 +186,11 @@ test "bitset with huge enum" {
     testing.expect(huge_set.has(.ZZZ));
     testing.expect(!huge_set.has(.ZZY));
     testing.expect(!huge_set.has(.ZZX));
+
+    // bug triggered by printing this enumSet
+    // zig version 0.5.0+7ebc624a1 Thu 30 Jan 2020
+    // std.mem.Allocator.alignedRealloc...Assertion failed at zig/src/analyze.cpp:9222 in get_llvm_type. This is a bug in the Zig compiler.
+    // huge_set.printLimbs();
 }
 
 test "set operations" {
@@ -278,7 +236,7 @@ test "set operations" {
     testing.expect(!a.isSubsetOf(b));
 }
 
-test "translate / toEnums" {
+test "translate / toEnumSlice" {
     const E = enum {
         A,
         B,
@@ -293,27 +251,10 @@ test "translate / toEnums" {
     const FSet = EnumSet(F);
     const al = std.heap.page_allocator;
     const e = ESet.init(.{ .A, .B, .C });
-    testing.expect(std.mem.eql(E, &[_]E{ .A, .B, .C }, try e.toEnums(al)));
+    testing.expect(std.mem.eql(E, &[_]E{ .A, .B, .C }, try e.toEnumSlice(al)));
 
     testing.expect(std.mem.eql(F, &[_]F{ .D, .E, .F }, try e.translate(al, F)));
-}
 
-test "asArray" {
-    const E = enum {
-        A,
-        B,
-        C,
-    };
-    const ESet = EnumSet(E);
-    var e = ESet.init(.{ .A, .B, .C });
-
-    var bit_vec = e.asBitVec();
-    testing.expect(bit_vec[0]);
-    testing.expect(bit_vec[1]);
-    testing.expect(bit_vec[2]);
-    e.unset(.{.A});
-    bit_vec = e.asBitVec();
-    testing.expect(!bit_vec[0]);
-    testing.expect(bit_vec[1]);
-    testing.expect(bit_vec[2]);
+    var buf: [10]u8 = undefined;
+    testing.expect(std.mem.eql(u8, try e.limbString(&buf), "111"));
 }

@@ -2,7 +2,7 @@ const Builder = @import("std").build.Builder;
 
 pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
-    const lib = b.addStaticLibrary("zig_enum_set", "src/main.zig");
+    const lib = b.addStaticLibrary("zig_enum_set", "src/enum_set.zig");
     lib.setBuildMode(mode);
     lib.install();
 
