@@ -52,7 +52,7 @@ test "demo" {
     // while loop over each bit
     var _abc = abc; // need to be a mutable 'var'
     var i: usize = 0;
-    while (_abc.bits.next()) |bit| : (i += 1) {
+    while (_abc.bits.nextBit()) |bit| : (i += 1) {
         const at = _abc.bits.at(i) orelse return testing.expect(false);
         testing.expect(bit == at);
     }
@@ -63,9 +63,9 @@ test "demo" {
         var bit_idx: usize = 0;
         while (bit_idx < 8) : (bit_idx += 1) {
             const bit_offset = byte_idx * 8 + bit_idx;
-            if (bit_offset >= abc.count()) break;
-            if (abc.bits.at(bit_offset)) |at|
-                expect((byte >> @truncate(u3, bit_idx)) & 1 == at);
+            if (bit_offset >= ESet.BitsType.bit_len) break;
+            const at = abc.bits.at(bit_offset) orelse break;
+            expect((byte >> @truncate(u3, bit_idx)) & 1 == at);
         }
     }
 
@@ -82,10 +82,11 @@ test "demo" {
         if (abc.bits.at(byte_view_idx * 8 + 7)) |at| expect(byte_view._7 == at);
 
         // the same can be done using @field
-        inline for (std.meta.fields(ESet.BitsType.ByteView)) |f, field_idx| {
+        inline for (std.meta.fields(ByteView)) |f, field_idx| {
             const bit_offset = byte_view_idx * 8 + field_idx;
-            if (bit_offset >= abc.count()) break;
-            if (abc.bits.at(bit_offset)) |at| expect(@field(byte_view, f.name) == at);
+            if (bit_offset >= ESet.BitsType.bit_len) break;
+            const at = abc.bits.at(bit_offset) orelse break;
+            expect(@field(byte_view, f.name) == at);
         }
     }
 

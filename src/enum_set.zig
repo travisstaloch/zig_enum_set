@@ -1,4 +1,5 @@
 const Bits = @import("bits.zig").Bits;
+const ByteView = @import("bits.zig").ByteView;
 const std = @import("std");
 const testing = std.testing;
 const warn = std.debug.warn;
@@ -124,8 +125,8 @@ pub fn EnumSet(comptime T: type) type {
             const result_start_ptr = result.ptr;
             var i: usize = 0;
             while (i < member_count) : (i += 1) {
-                const at = self.bits.at(i) orelse continue;
-                if (at == 1) {
+                const bit = self.bits.at(i) orelse continue;
+                if (bit == 1) {
                     result[0] = @intToEnum(To, @intCast(@TagType(T), i));
                     result.ptr += 1;
                 }
@@ -300,11 +301,11 @@ test "demo" {
     expect(ab.equals(ab));
 
     // while loop over each bit
-    var _abc = abc; // need to be a mutable 'var'
+    var _abc = abc; // needs to be a mutable 'var'
     var i: usize = 0;
-    while (_abc.bits.next()) |bit| : (i += 1) {
-        const at = _abc.bits.at(i) orelse return testing.expect(false);
-        testing.expect(bit == at);
+    while (_abc.bits.nextBit()) |bit| : (i += 1) {
+        const other_bit = _abc.bits.at(i) orelse return testing.expect(false);
+        testing.expect(bit == other_bit);
     }
     _abc.bits.reset(); // to use as iterator again, first reset()
 
@@ -313,29 +314,30 @@ test "demo" {
         var bit_idx: usize = 0;
         while (bit_idx < 8) : (bit_idx += 1) {
             const bit_offset = byte_idx * 8 + bit_idx;
-            if (bit_offset >= abc.count()) break;
-            if (abc.bits.at(bit_offset)) |at|
-                expect((byte >> @truncate(u3, bit_idx)) & 1 == at);
+            if (bit_offset >= ESet.BitsType.bit_len) break;
+            const bit = abc.bits.at(bit_offset) orelse break;
+            expect((byte >> @truncate(u3, bit_idx)) & 1 == bit);
         }
     }
 
     // for loop over each byte using ByteView
     for (abc.bits.byteViewSlice()) |byte_view, byte_view_idx| {
         // ByteView allows field access of each bit with fields _0, _1 .. _7
-        if (abc.bits.at(byte_view_idx * 8 + 0)) |at| expect(byte_view._0 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 1)) |at| expect(byte_view._1 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 2)) |at| expect(byte_view._2 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 3)) |at| expect(byte_view._3 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 4)) |at| expect(byte_view._4 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 5)) |at| expect(byte_view._5 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 6)) |at| expect(byte_view._6 == at);
-        if (abc.bits.at(byte_view_idx * 8 + 7)) |at| expect(byte_view._7 == at);
+        if (abc.bits.at(byte_view_idx * 8 + 0)) |bit| expect(byte_view._0 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 1)) |bit| expect(byte_view._1 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 2)) |bit| expect(byte_view._2 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 3)) |bit| expect(byte_view._3 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 4)) |bit| expect(byte_view._4 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 5)) |bit| expect(byte_view._5 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 6)) |bit| expect(byte_view._6 == bit);
+        if (abc.bits.at(byte_view_idx * 8 + 7)) |bit| expect(byte_view._7 == bit);
 
         // the same can be done using @field
-        inline for (std.meta.fields(ESet.BitsType.ByteView)) |f, field_idx| {
+        inline for (std.meta.fields(ByteView)) |f, field_idx| {
             const bit_offset = byte_view_idx * 8 + field_idx;
-            if (bit_offset >= abc.count()) break;
-            if (abc.bits.at(bit_offset)) |at| expect(@field(byte_view, f.name) == at);
+            if (bit_offset >= ESet.BitsType.bit_len) break;
+            const bit = abc.bits.at(bit_offset) orelse break;
+            expect(@field(byte_view, f.name) == bit);
         }
     }
 
