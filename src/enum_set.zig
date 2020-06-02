@@ -6,8 +6,8 @@ const warn = std.debug.warn;
 
 pub fn EnumSet(comptime T: type) type {
     return struct {
-        pub const member_count = @memberCount(T);
-        pub const BitsIntType = @IntType(false, member_count);
+        pub const member_count = @typeInfo(T).Enum.fields.len;
+        pub const BitsIntType = std.meta.Int(false, member_count);
         pub const BitsType = Bits(BitsIntType);
 
         bits: BitsType,
