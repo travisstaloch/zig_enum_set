@@ -7,14 +7,14 @@ const warn = std.debug.warn;
 pub fn EnumSet(comptime T: type) type {
     return struct {
         pub const member_count = @typeInfo(T).Enum.fields.len;
-        pub const BitsIntType = std.meta.Int(false, member_count);
+        pub const BitsIntType = std.meta.Int(.unsigned, member_count);
         pub const BitsType = Bits(BitsIntType);
 
         bits: BitsType,
 
         const Self = @This();
 
-        pub fn init(e: var) Self {
+        pub fn init(e: anytype) Self {
             var result = Self{ .bits = BitsType.initZero() };
             inline for (std.meta.fields(@TypeOf(e))) |f| {
                 result.bits.set(@enumToInt(@as(T, @field(e, f.name))));
@@ -22,7 +22,7 @@ pub fn EnumSet(comptime T: type) type {
             return result;
         }
 
-        pub fn put(self: *Self, e: var) void {
+        pub fn put(self: *Self, e: anytype) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
                 self.bits.set(@enumToInt(@as(T, @field(e, f.name))));
             }
@@ -32,7 +32,7 @@ pub fn EnumSet(comptime T: type) type {
             return if (self.bits.at(i)) |_| @intToEnum(T, i) else null;
         }
 
-        pub fn remove(self: *Self, e: var) void {
+        pub fn remove(self: *Self, e: anytype) void {
             inline for (std.meta.fields(@TypeOf(e))) |f| {
                 self.bits.unset(@enumToInt(@as(T, @field(e, f.name))));
             }
@@ -42,13 +42,13 @@ pub fn EnumSet(comptime T: type) type {
             return if (self.bits.at(@enumToInt(e))) |bit| bit == 1 else false;
         }
 
-        pub fn containsAll(self: Self, e: var) bool {
+        pub fn containsAll(self: Self, e: anytype) bool {
             inline for (std.meta.fields(@TypeOf(e))) |f|
                 if (!self.contains(@field(e, f.name))) return false;
             return true;
         }
 
-        pub fn containsAny(self: Self, e: var) bool {
+        pub fn containsAny(self: Self, e: anytype) bool {
             inline for (std.meta.fields(@TypeOf(e))) |f|
                 if (self.contains(@field(e, f.name))) return true;
             return false;
