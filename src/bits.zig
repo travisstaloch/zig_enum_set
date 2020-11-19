@@ -1,5 +1,4 @@
 const std = @import("std");
-const warn = std.debug.warn;
 
 pub fn Bits(comptime T: type) type {
     return struct {
@@ -10,7 +9,7 @@ pub fn Bits(comptime T: type) type {
         const Self = @This();
         pub const bit_len = @bitSizeOf(T);
         pub const aligned_bit_len = std.math.max(if (bit_len % 8 == 0) bit_len else bit_len + bit_len % 8, 8);
-        const ShiftType = std.meta.Int(false, std.math.log2_int_ceil(usize, bit_len));
+        const ShiftType = std.meta.Int(.unsigned, std.math.log2_int_ceil(usize, bit_len));
 
         pub fn init(value: T) Self {
             return .{ .value = value };
@@ -75,7 +74,7 @@ test "iterate get / set" {
     const EnumSet = @import("enum_set.zig").EnumSet;
     const ESet = EnumSet(E);
     var e = ESet.init(.{ .AA, .ZZ });
-    const ValType = std.meta.Int(false, ESet.member_count);
+    const ValType = std.meta.Int(.unsigned, ESet.member_count);
     var value: ValType = 1;
 
     const BitsType = Bits(ValType);
